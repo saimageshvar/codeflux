@@ -10,6 +10,8 @@ module Codeflux
       @_codeflux_methods = Set.new
       @_codeflux_filter = Codeflux::Filter.new
 
+      project_prefix = "#{Codeflux.project_root}/"
+
       @_codeflux_trace = TracePoint.new(:call, :c_call) do |tp|
         path = tp.path
         next unless @_codeflux_filter.accept?(path)
@@ -26,7 +28,10 @@ module Codeflux
         end
         qualified = "#{klass_name}#{separator}#{tp.method_id}"
 
-        @_codeflux_methods.add("#{qualified} #{path}:#{tp.lineno}")
+        # Relativize path against project root
+        relative_path = path.start_with?(project_prefix) ? path[project_prefix.length..] : path
+
+        @_codeflux_methods.add("#{qualified} #{relative_path}:#{tp.lineno}")
       end
 
       @_codeflux_trace.enable
