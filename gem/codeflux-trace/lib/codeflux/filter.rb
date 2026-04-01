@@ -4,6 +4,7 @@ module Codeflux
     DEFAULT_EXCLUDE = %w[
       kernel/ basicobject ruby/ rubygems/ bundler/
       monitor.rb delegate.rb set.rb
+      codeflux-trace/
     ].freeze
 
     def initialize(include_paths: DEFAULT_INCLUDE, exclude_patterns: DEFAULT_EXCLUDE, gem_depth: 1)

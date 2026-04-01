@@ -127,11 +127,16 @@ exclude = []
 fn cmd_ingest(traces_dir: &Path, output: &Path, keep_traces: bool, quiet: bool) -> Result<()> {
     let built = codeflux_ingest::builder::build_index(traces_dir)?;
 
+    let project_methods = codeflux_core::filter::count_project_methods(
+        &built.strings,
+        &built.file_methods,
+    );
+
     if !quiet {
         println!("Ingested {} trace files ({} empty, {} skipped)",
             built.stats.files_processed, built.stats.files_empty, built.stats.files_skipped);
-        println!("  {} unique methods, {} tests",
-            built.stats.total_methods, built.stats.total_tests);
+        println!("  {} project methods ({} traced total), {} tests",
+            project_methods, built.stats.total_methods, built.stats.total_tests);
     }
 
     // Ensure output directory exists
@@ -266,10 +271,14 @@ fn cmd_stats(index_path: &Path) -> Result<()> {
 
     let metadata = std::fs::metadata(index_path)?;
     let size_kb = metadata.len() as f64 / 1024.0;
+    let project_methods = codeflux_core::filter::count_project_methods(
+        index.strings(),
+        index.file_methods(),
+    );
 
     println!("CodeFlux Index: {}", index_path.display());
     println!("  Commit:      {}", index.commit_sha());
-    println!("  Methods:     {}", index.method_count());
+    println!("  Methods:     {} ({} traced total)", project_methods, index.method_count());
     println!("  Tests:       {}", index.test_count());
     println!("  Index size:  {:.1} KB", size_kb);
 

@@ -1,6 +1,7 @@
 pub mod intern;
 pub mod graph;
 pub mod index;
+pub mod filter;
 
 /// Unique identifier for an interned method string.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]

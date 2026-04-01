@@ -1,3 +1,4 @@
+use codeflux_core::filter::is_project_method;
 use codeflux_core::index::CfxReader;
 use anyhow::Result;
 
@@ -12,95 +13,22 @@ pub struct UntestedResult {
     pub untested_count: usize,
 }
 
-/// Known path segments that indicate non-project (gem/stdlib) files.
-const EXTERNAL_PATH_MARKERS: &[&str] = &[
-    "gems/",
-    "/ruby/",
-    "/rubygems/",
-    "/bundler/",
-    "rubygems.rb",
-    "<internal:",
-];
-
-/// Ruby core/stdlib classes whose methods are traced when called from project
-/// code, but which are not project-defined methods.
-const STDLIB_CLASS_PREFIXES: &[&str] = &[
-    "BasicObject#",
-    "BasicObject.",
-    "Kernel#",
-    "Kernel.",
-    "Object#",
-    "Object.",
-    "Class#",
-    "Class.",
-    "Module#",
-    "Module.",
-    "Integer#",
-    "Integer.",
-    "Float#",
-    "Float.",
-    "String#",
-    "String.",
-    "Array#",
-    "Array.",
-    "Hash#",
-    "Hash.",
-    "Symbol#",
-    "Symbol.",
-    "NilClass#",
-    "TrueClass#",
-    "FalseClass#",
-    "Comparable#",
-    "Enumerable#",
-    "IO#",
-    "IO.",
-    "File#",
-    "File.",
-    "Dir#",
-    "Dir.",
-    "Proc#",
-    "Thread#",
-    "Thread.",
-    "Mutex#",
-];
-
-/// Returns true if a file path looks like it belongs to the project
-/// (as opposed to gems, stdlib, or absolute system paths).
-fn is_project_file(path: &str) -> bool {
-    !EXTERNAL_PATH_MARKERS.iter().any(|marker| path.contains(marker))
-}
-
-/// Returns true if a method name looks like a Ruby stdlib/core method.
-fn is_stdlib_method(name: &str) -> bool {
-    STDLIB_CLASS_PREFIXES.iter().any(|prefix| name.starts_with(prefix))
-}
-
 /// Find methods with zero test coverage.
 /// Uses the file_methods map: for each file, check each method.
 /// A method is "untested" if it has zero entries in the inverted index.
 ///
 /// `path_filter`: optional prefix filter, e.g., "app/models/".
-/// When no filter is given, only project-owned files are considered
-/// (gems and stdlib paths are excluded).
+/// When no filter is given, only project-owned source methods are considered
+/// (gems, stdlib, and test files are excluded).
 pub fn untested_methods(index: &CfxReader, path_filter: Option<&str>) -> Result<UntestedResult> {
     let mut methods = Vec::new();
     let mut total_methods = 0usize;
 
-    // Iterate all files and their methods via file_methods
     for (&file_id, method_ids) in index.file_methods().iter() {
         let file_path = index.strings().resolve(file_id);
 
-        // Apply path filter or default project-file filter
         if let Some(filter) = path_filter {
             if !file_path.starts_with(filter) {
-                continue;
-            }
-        } else {
-            // Default: skip non-project files, test files, and tracing infrastructure
-            if !is_project_file(file_path) {
-                continue;
-            }
-            if file_path.starts_with("test/") || file_path.contains("/test/") {
                 continue;
             }
         }
@@ -108,9 +36,8 @@ pub fn untested_methods(index: &CfxReader, path_filter: Option<&str>) -> Result<
         for &method_id in method_ids {
             let method_name = index.strings().resolve(method_id.0);
 
-            // Skip Ruby core/stdlib methods that were traced at call sites
-            // in project files but aren't project-defined methods.
-            if path_filter.is_none() && is_stdlib_method(method_name) {
+            // When no explicit filter, skip non-project methods
+            if path_filter.is_none() && !is_project_method(method_name, file_path) {
                 continue;
             }
 
