@@ -1,0 +1,11 @@
+[package]
+name = "codeflux-query"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+codeflux-core.workspace = true
+git2.workspace = true
+tree-sitter.workspace = true
+tree-sitter-ruby.workspace = true
+anyhow.workspace = true

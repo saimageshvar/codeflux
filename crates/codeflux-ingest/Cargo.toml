@@ -1,0 +1,9 @@
+[package]
+name = "codeflux-ingest"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+codeflux-core.workspace = true
+rayon.workspace = true
+anyhow.workspace = true

@@ -1,0 +1,15 @@
+[package]
+name = "codeflux-cli"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "codeflux"
+path = "src/main.rs"
+
+[dependencies]
+codeflux-core.workspace = true
+codeflux-ingest.workspace = true
+codeflux-query.workspace = true
+clap.workspace = true
+anyhow.workspace = true

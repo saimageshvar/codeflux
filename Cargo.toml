@@ -1,0 +1,28 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/codeflux-core",
+    "crates/codeflux-ingest",
+    "crates/codeflux-query",
+    "crates/codeflux-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[workspace.dependencies]
+codeflux-core = { path = "crates/codeflux-core" }
+codeflux-ingest = { path = "crates/codeflux-ingest" }
+codeflux-query = { path = "crates/codeflux-query" }
+clap = { version = "4", features = ["derive"] }
+memmap2 = "0.9"
+rayon = "1.10"
+git2 = "0.19"
+tree-sitter = "0.24"
+tree-sitter-ruby = "0.23"
+anyhow = "1"
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
