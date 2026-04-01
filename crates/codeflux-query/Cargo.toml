@@ -9,3 +9,7 @@ git2.workspace = true
 tree-sitter.workspace = true
 tree-sitter-ruby.workspace = true
 anyhow.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
+codeflux-ingest = { path = "../codeflux-ingest" }

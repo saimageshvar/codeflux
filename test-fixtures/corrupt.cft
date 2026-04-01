@@ -1,0 +1,5 @@
+T test/unit/models/user_test.rb::UserTest#test_broken
+C abc123
+M User#foo app/models/user.rb:1
+GARBAGE LINE
+M User#bar app/mod

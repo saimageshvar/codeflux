@@ -1,0 +1,5 @@
+T test/unit/models/user_test.rb::UserTest#test_deactivate
+C fdd907a7cd4b
+M User#deactivate! app/models/user.rb:142
+M User#update_status app/models/user.rb:156
+M ActiveRecord::Base#save gems/activerecord-7.2.2/lib/active_record/persistence.rb:512
