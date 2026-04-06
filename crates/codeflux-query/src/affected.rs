@@ -53,6 +53,12 @@ pub fn resolve_changes(
             continue;
         }
 
+        // Skip test files — changes to tests don't tell us anything about
+        // which other tests need to run; the user re-runs changed test files directly.
+        if changed_file.path.starts_with("test/") || changed_file.path.contains("/test/") {
+            continue;
+        }
+
         let full_path = project_root.join(&changed_file.path);
         let source = match std::fs::read_to_string(&full_path) {
             Ok(s) => s,
@@ -149,9 +155,20 @@ fn extract_changed_files(diff: &Diff) -> Vec<ChangedFile> {
             true
         }),
         Some(&mut |_delta: DiffDelta, _hunk: Option<DiffHunk>, line: DiffLine| -> bool {
-            if let Some(new_lineno) = line.new_lineno() {
-                if let Some(file) = files.borrow_mut().last_mut() {
-                    file.changed_lines.push(new_lineno);
+            // Only collect actually changed lines, not context lines.
+            // origin() returns '+' for additions, '-' for deletions, ' ' for context.
+            let origin = line.origin();
+            if origin == '+' || origin == '-' {
+                // For additions, use new_lineno; for deletions, use old_lineno
+                let lineno = if origin == '+' {
+                    line.new_lineno()
+                } else {
+                    line.old_lineno()
+                };
+                if let Some(ln) = lineno {
+                    if let Some(file) = files.borrow_mut().last_mut() {
+                        file.changed_lines.push(ln);
+                    }
                 }
             }
             true

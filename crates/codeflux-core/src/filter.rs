@@ -9,6 +9,7 @@ const EXTERNAL_PATH_MARKERS: &[&str] = &[
     "/bundler/",
     "rubygems.rb",
     "<internal:",
+    "config/initializers/",
 ];
 
 /// Ruby core/stdlib classes whose methods are traced when called from project
@@ -51,6 +52,12 @@ const STDLIB_CLASS_PREFIXES: &[&str] = &[
     "Thread#",
     "Thread.",
     "Mutex#",
+    "Enumerator#",
+    "Enumerator.",
+    "Regexp#",
+    "Regexp.",
+    "Pathname#",
+    "Pathname.",
 ];
 
 /// Returns true if a file path looks like it belongs to the project

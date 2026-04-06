@@ -37,6 +37,11 @@ impl RubyMethodMapper {
             .map(|m| m.qualified_name.clone())
             .collect()
     }
+
+    /// Returns all parsed method ranges.
+    pub fn all_methods(&self) -> &[MethodRange] {
+        &self.methods
+    }
 }
 
 /// Extract the text of a node from the source bytes.

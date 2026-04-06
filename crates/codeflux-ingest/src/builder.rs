@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 
 use codeflux_core::intern::StringTable;
 use codeflux_core::graph::{InvertedIndex, ForwardIndex, FileMethodMap};
+use codeflux_core::filter::is_stdlib_method;
 use codeflux_core::{MethodId, TestId};
 use crate::parser::{self, TraceFile};
 
@@ -78,6 +79,13 @@ pub fn build_index(traces_dir: &Path) -> Result<BuiltIndex> {
                 let test_id = TestId(strings.intern(&trace.test_id));
 
                 for method in &trace.methods {
+                    // Defense-in-depth: skip stdlib methods even if the gem
+                    // wrote them to the trace (e.g., old trace files generated
+                    // before the gem-level filter was added).
+                    if is_stdlib_method(&method.qualified_name) {
+                        continue;
+                    }
+
                     let method_id = MethodId(strings.intern(&method.qualified_name));
                     let file_id = strings.intern(&method.file_path);
                     let _compound = strings.intern(

@@ -83,7 +83,7 @@ fn main() -> Result<()> {
             cmd_affected(&project_root, &index_path, diff.as_deref(), &format, cli.quiet)
         }
         Commands::Coverage { method } => cmd_coverage(&index_path, &method),
-        Commands::Untested { path } => cmd_untested(&index_path, path.as_deref()),
+        Commands::Untested { path } => cmd_untested(&project_root, &index_path, path.as_deref()),
         Commands::Stats => cmd_stats(&index_path),
     }
 }
@@ -246,11 +246,11 @@ fn cmd_coverage(index_path: &Path, method: &str) -> Result<()> {
     Ok(())
 }
 
-fn cmd_untested(index_path: &Path, path_filter: Option<&str>) -> Result<()> {
+fn cmd_untested(project_root: &Path, index_path: &Path, path_filter: Option<&str>) -> Result<()> {
     let index = codeflux_core::index::CfxReader::open(index_path)
         .context("could not open index file — run `codeflux ingest` first")?;
 
-    let result = codeflux_query::untested::untested_methods(&index, path_filter)?;
+    let result = codeflux_query::untested::untested_methods(&index, path_filter, Some(project_root))?;
 
     if result.untested_count == 0 {
         println!("All {} methods have test coverage!", result.total_methods);
