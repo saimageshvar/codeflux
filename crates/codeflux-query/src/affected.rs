@@ -182,28 +182,45 @@ fn extract_changed_files(diff: &Diff) -> Vec<ChangedFile> {
 ///
 /// `project_root`: path to the git repo
 /// `index`: the loaded .cfx index
-/// `diff_ref`: git ref to diff against (None = uncommitted changes vs HEAD)
+/// `diff_ref`: git ref to diff against (None = working directory vs HEAD)
+/// `include_uncommitted`: when true and `diff_ref` is Some, diff the ref against
+///   the working directory (including staged changes) rather than against HEAD.
+///   When `diff_ref` is None this flag has no effect — working-tree-vs-HEAD is
+///   already the default.
 pub fn affected_tests(
     project_root: &Path,
     index: &CfxReader,
     diff_ref: Option<&str>,
+    include_uncommitted: bool,
 ) -> Result<AffectedResult> {
     let repo = Repository::open(project_root)?;
 
-    let diff = if let Some(ref_name) = diff_ref {
-        // Diff between ref and HEAD
-        let obj = repo.revparse_single(ref_name)?;
-        let old_tree = obj.peel_to_tree()?;
-        let head = repo.head()?.peel_to_tree()?;
-        repo.diff_tree_to_tree(Some(&old_tree), Some(&head), None)?
-    } else {
-        // Diff of uncommitted changes (working dir vs HEAD)
-        let head = repo.head()?.peel_to_tree()?;
-        let mut opts = DiffOptions::new();
-        let mut workdir_diff = repo.diff_index_to_workdir(None, Some(&mut opts))?;
-        let mut merged = repo.diff_tree_to_index(Some(&head), None, Some(&mut opts))?;
-        merged.merge(&mut workdir_diff)?;
-        merged
+    let diff = match (diff_ref, include_uncommitted) {
+        (Some(ref_name), true) => {
+            // Ref vs working directory (with index) — covers everything on the
+            // branch that isn't in `ref_name` yet, whether committed or not.
+            let obj = repo.revparse_single(ref_name)?;
+            let old_tree = obj.peel_to_tree()?;
+            let mut opts = DiffOptions::new();
+            repo.diff_tree_to_workdir_with_index(Some(&old_tree), Some(&mut opts))?
+        }
+        (Some(ref_name), false) => {
+            // Ref vs HEAD (committed changes only).
+            let obj = repo.revparse_single(ref_name)?;
+            let old_tree = obj.peel_to_tree()?;
+            let head = repo.head()?.peel_to_tree()?;
+            repo.diff_tree_to_tree(Some(&old_tree), Some(&head), None)?
+        }
+        (None, _) => {
+            // Uncommitted changes (working dir vs HEAD). `include_uncommitted`
+            // is a no-op here.
+            let head = repo.head()?.peel_to_tree()?;
+            let mut opts = DiffOptions::new();
+            let mut workdir_diff = repo.diff_index_to_workdir(None, Some(&mut opts))?;
+            let mut merged = repo.diff_tree_to_index(Some(&head), None, Some(&mut opts))?;
+            merged.merge(&mut workdir_diff)?;
+            merged
+        }
     };
 
     let changed = extract_changed_files(&diff);
@@ -292,5 +309,77 @@ end
         // File doesn't exist in project_dir — should fall back to file-level
         let result = resolve_changes(&changed, &reader, project_dir.path());
         assert!(!result.fallback_files.is_empty());
+    }
+
+    /// End-to-end test for the `--include-uncommitted` mode: initialize a
+    /// real git repo, land a committed change to `deactivate!`, then stack
+    /// an uncommitted change on top. Verify all three ref+flag combinations
+    /// return the expected slice of the diff.
+    #[test]
+    fn test_affected_tests_ref_vs_worktree_includes_uncommitted() {
+        use git2::{Repository, Signature};
+        use std::fs;
+
+        let (_idx_tmp, reader) = make_test_reader();
+
+        let project_dir = TempDir::new().unwrap();
+        let root = project_dir.path();
+        let repo = Repository::init(root).unwrap();
+        let sig = Signature::now("Test", "test@example.com").unwrap();
+
+        let models_dir = root.join("app/models");
+        fs::create_dir_all(&models_dir).unwrap();
+        let user_rb = models_dir.join("user.rb");
+
+        // Base commit — User#deactivate! with an original body. The `--diff`
+        // ref will point here.
+        fs::write(&user_rb,
+            "class User\n  def deactivate!\n    :original\n  end\nend\n").unwrap();
+        let mut idx = repo.index().unwrap();
+        idx.add_path(std::path::Path::new("app/models/user.rb")).unwrap();
+        idx.write().unwrap();
+        let tree_id = idx.write_tree().unwrap();
+        let tree = repo.find_tree(tree_id).unwrap();
+        let base_oid = repo.commit(Some("HEAD"), &sig, &sig, "base", &tree, &[]).unwrap();
+        let base_commit = repo.find_commit(base_oid).unwrap();
+
+        // HEAD commit — modifies the body of deactivate!.
+        fs::write(&user_rb,
+            "class User\n  def deactivate!\n    :committed_change\n  end\nend\n").unwrap();
+        let mut idx = repo.index().unwrap();
+        idx.add_path(std::path::Path::new("app/models/user.rb")).unwrap();
+        idx.write().unwrap();
+        let tree_id = idx.write_tree().unwrap();
+        let tree = repo.find_tree(tree_id).unwrap();
+        repo.commit(Some("HEAD"), &sig, &sig, "head", &tree, &[&base_commit]).unwrap();
+
+        // Uncommitted change on top — modifies deactivate! again.
+        fs::write(&user_rb,
+            "class User\n  def deactivate!\n    :uncommitted_change\n  end\nend\n").unwrap();
+
+        let base_sha = base_oid.to_string();
+
+        // (1) include_uncommitted=true against base — combines committed +
+        // uncommitted; should see the method change.
+        let r = affected_tests(root, &reader, Some(&base_sha), true).unwrap();
+        assert!(
+            r.changed_methods.contains(&"User#deactivate!".to_string()),
+            "ref+worktree: expected User#deactivate!, got {:?}", r.changed_methods
+        );
+        assert!(!r.tests.is_empty(), "ref+worktree: expected non-empty tests");
+
+        // (2) include_uncommitted=false against HEAD — HEAD vs HEAD, empty.
+        let r = affected_tests(root, &reader, Some("HEAD"), false).unwrap();
+        assert!(r.tests.is_empty(), "HEAD vs HEAD: expected empty");
+        assert!(r.changed_methods.is_empty());
+
+        // (3) include_uncommitted=true against HEAD — only the working-tree
+        // slice should show up.
+        let r = affected_tests(root, &reader, Some("HEAD"), true).unwrap();
+        assert!(
+            r.changed_methods.contains(&"User#deactivate!".to_string()),
+            "HEAD+worktree: expected User#deactivate! from uncommitted, got {:?}",
+            r.changed_methods
+        );
     }
 }

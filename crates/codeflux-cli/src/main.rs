@@ -43,6 +43,12 @@ enum Commands {
         #[arg(long)]
         diff: Option<String>,
 
+        /// When combined with --diff, include uncommitted working-tree changes
+        /// (staged + unstaged) in addition to committed diffs. Ignored when
+        /// --diff is omitted, since working-tree-vs-HEAD is already the default.
+        #[arg(long)]
+        include_uncommitted: bool,
+
         /// Output format: text, json
         #[arg(long, default_value = "text")]
         format: String,
@@ -79,8 +85,8 @@ fn main() -> Result<()> {
             let output = output.unwrap_or(index_path);
             cmd_ingest(&traces_dir, &output, keep_traces, cli.quiet)
         }
-        Commands::Affected { diff, format } => {
-            cmd_affected(&project_root, &index_path, diff.as_deref(), &format, cli.quiet)
+        Commands::Affected { diff, include_uncommitted, format } => {
+            cmd_affected(&project_root, &index_path, diff.as_deref(), include_uncommitted, &format, cli.quiet)
         }
         Commands::Coverage { method } => cmd_coverage(&index_path, &method),
         Commands::Untested { path } => cmd_untested(&project_root, &index_path, path.as_deref()),
@@ -175,13 +181,19 @@ fn cmd_affected(
     project_root: &Path,
     index_path: &Path,
     diff_ref: Option<&str>,
+    include_uncommitted: bool,
     format: &str,
     quiet: bool,
 ) -> Result<()> {
     let index = codeflux_core::index::CfxReader::open(index_path)
         .context("could not open index file — run `codeflux ingest` first")?;
 
-    let result = codeflux_query::affected::affected_tests(project_root, &index, diff_ref)?;
+    let result = codeflux_query::affected::affected_tests(
+        project_root,
+        &index,
+        diff_ref,
+        include_uncommitted,
+    )?;
 
     // Print warnings
     if !quiet {
